@@ -3,7 +3,7 @@ from sklearn.preprocessing import OneHotEncoder
 from sklearn.metrics import pairwise_distances
 
 #Read the dataset
-df = pd.read_csv('DataAnalyticsLab\DissimilarityMatrix\Dis.csv')
+df = pd.read_csv('DataAnalyticsLab\DissimilarityMatrix\Dissimilarity.csv')
 
 #Seperate nominal and numeric attributes
 nominal_attributes = df.select_dtypes(include = ['object'])
