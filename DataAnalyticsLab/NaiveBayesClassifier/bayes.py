@@ -1,82 +1,77 @@
-def train_naive_bayes_classifier(training_data):
-    class_probs = {}
-    word_probs = {}
+def train_naive_bayes_classifier(data):
+    # Separate data by class
+    class_data = {}
+    for entry in data:
+        features, label = entry[:-1], entry[-1]
+        if label not in class_data:
+            class_data[label] = []
+        class_data[label].append(features)
 
-    total_documents = len(training_data)
+    # Calculate class probabilities and feature probabilities
+    class_probabilities = {}
+    feature_probabilities = {}
 
-    # Calculate class probabilities
-    for document, label in training_data:
-        if label not in class_probs:
-            class_probs[label] = 1
-        else:
-            class_probs[label] += 1
+    total_entries = len(data)
+    for label, features_list in class_data.items():
+        class_probabilities[label] = len(features_list) / total_entries
 
-    for label in class_probs:
-        class_probs[label] /= total_documents
+        feature_probabilities[label] = {}
+        for feature_index in range(len(features_list[0])):
+            feature_values = [entry[feature_index] for entry in features_list]
+            unique_values = set(feature_values)
+            feature_probabilities[label][feature_index] = {
+                value: feature_values.count(value) / len(features_list)
+                for value in unique_values
+            }
 
-    # Calculate word probabilities
-    word_counts = {}
-    for document, label in training_data:
-        for word in document.split():
-            if (word, label) not in word_counts:
-                word_counts[(word, label)] = 1
-            else:
-                word_counts[(word, label)] += 1
+    return class_probabilities, feature_probabilities
 
-    for (word, label), count in word_counts.items():
-        if label not in word_probs:
-            word_probs[label] = {}
 
-        word_probs[label][word] = count
-
-    return class_probs, word_probs
-
-def classify_document(document, class_probs, word_probs):
+def predict_naive_bayes(class_probabilities, feature_probabilities, input_features):
     best_label = None
-    max_prob = float('-inf')
+    best_score = -1
 
-    for label in class_probs:
-        prob = class_probs[label]
+    for label, class_probability in class_probabilities.items():
+        score = class_probability
 
-        for word in document.split():
-            if label in word_probs and word in word_probs[label]:
-                prob *= word_probs[label][word]
+        for feature_index, feature_value in enumerate(input_features):
+            if feature_value in feature_probabilities[label][feature_index]:
+                score *= feature_probabilities[label][feature_index][feature_value]
             else:
-                prob *= 1e-10  # small constant to avoid zero probability
+                # Laplace smoothing for unseen values
+                score *= 1e-5
 
-        if prob > max_prob:
-            max_prob = prob
+        if score > best_score:
+            best_score = score
             best_label = label
 
     return best_label
 
-# Sample training data
+
+# Specify training data
 training_data = [
-    ('I love this product', 'positive'),
-    ('This is an amazing product', 'positive'),
-    ('I hate this product', 'negative'),
-    ('This product is terrible', 'negative'),
-    ('I have no opinion about this product', 'neutral'),
-    ('It is okay, not great, not terrible', 'neutral'),
+    [1, 35000, 'Yes', 'No'],
+    [2, 50000, 'No', 'Yes'],
+    [3, 25000, 'Yes', 'Yes'],
+    [4, 60000, 'No', 'Yes'],
+    [5, 80000, 'Yes', 'Yes'],
+    [6, 45000, 'No', 'No'],
+    [7, 55000, 'Yes', 'Yes'],
+    [8, 20000, 'Yes', 'No'],
+    [9, 30000, 'No', 'Yes'],
 ]
 
-# Sample test data
-test_data = [
-    ('This is a fantastic product', 'positive'),
-    ('I dislike this item', 'negative'),
-    ('I have mixed feelings about this product', 'neutral'),
-]
+# Train the Naive Bayes classifier
+class_probabilities, feature_probabilities = train_naive_bayes_classifier(training_data)
 
-# Train the classifier
-class_probs, word_probs = train_naive_bayes_classifier(training_data)
+# Get user input for test data
+num_test_entries = int(input("Enter the number of test entries: "))
+test_data = []
+for _ in range(num_test_entries):
+    test_entry = input("Enter test entry (space-separated features): ").split()
+    test_data.append(test_entry)
 
-# Test the classifier
-correct_predictions = 0
-for doc, true_label in test_data:
-    predicted_label = classify_document(doc, class_probs, word_probs)
-    print(f"Actual: {true_label}, Predicted: {predicted_label}")
-    if predicted_label == true_label:
-        correct_predictions += 1
-
-accuracy = correct_predictions / len(test_data)
-print(f"Accuracy: {accuracy}")
+# Make predictions on the test data
+for test_entry in test_data:
+    predicted_label = predict_naive_bayes(class_probabilities, feature_probabilities, test_entry)
+    print(f"Predicted label for {test_entry}: {predicted_label}")
