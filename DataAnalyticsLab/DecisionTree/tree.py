@@ -1,93 +1,84 @@
+import numpy as np
 import pandas as pd
 
-def fit(X, y, max_depth=None, depth=0):
-    if len(set(y)) == 1 or (max_depth is not None and depth == max_depth):
-        return {'class': y.iloc[0]}
+def calculate_gini_impurity(y):
+    classes, counts = np.unique(y, return_counts=True)
+    probabilities = counts / len(y)
+    gini_impurity = 1 - np.sum(probabilities ** 2)
+    return gini_impurity
 
-    best_feature, best_threshold = find_best_split(X, y)
-
-    if best_feature is None:
-        return {'class': y.mode().iloc[0]}
-
-    left_indices = X[best_feature] <= best_threshold
-    right_indices = ~left_indices
-
-    left_subtree = fit(X[left_indices], y[left_indices], max_depth, depth + 1)
-    right_subtree = fit(X[right_indices], y[right_indices], max_depth, depth + 1)
-
-    return {'feature_index': best_feature,
-            'threshold': best_threshold,
-            'left': left_subtree,
-            'right': right_subtree}
+def split_dataset(X, y, feature_index, threshold):
+    left_mask = X[:, feature_index] <= threshold
+    right_mask = ~left_mask
+    return X[left_mask], y[left_mask], X[right_mask], y[right_mask]
 
 def find_best_split(X, y):
+    m, n = X.shape
+    initial_gini = calculate_gini_impurity(y)
     best_gini = float('inf')
-    best_feature = None
+    best_feature_index = None
     best_threshold = None
 
-    for feature in X.columns:
-        thresholds = set(X[feature])
+    for feature_index in range(n):
+        thresholds = np.unique(X[:, feature_index])
         for threshold in thresholds:
-            left_indices = X[feature] <= threshold
-            right_indices = ~left_indices
-
-            gini = calculate_gini_index(y[left_indices], y[right_indices])
-            if gini < best_gini:
-                best_gini = gini
-                best_feature = feature
+            X_left, y_left, X_right, y_right = split_dataset(X, y, feature_index, threshold)
+            if len(y_left) == 0 or len(y_right) == 0:
+                continue
+            gini_left = len(y_left) / m * calculate_gini_impurity(y_left)
+            gini_right = len(y_right) / m * calculate_gini_impurity(y_right)
+            weighted_gini = gini_left + gini_right
+            if weighted_gini < best_gini:
+                best_gini = weighted_gini
+                best_feature_index = feature_index
                 best_threshold = threshold
 
-    return best_feature, best_threshold
+    return best_feature_index, best_threshold
 
-def calculate_gini_index(left_labels, right_labels):
-    left_size = len(left_labels)
-    right_size = len(right_labels)
-    total_size = left_size + right_size
+def build_tree(X, y, depth):
+    unique_classes, counts = np.unique(y, return_counts=True)
+    majority_class = unique_classes[np.argmax(counts)]
 
-    if total_size == 0:
-        return 0
+    if depth == 0 or len(unique_classes) == 1:
+        return {'value': majority_class}
 
-    p_left = left_size / total_size
-    p_right = right_size / total_size
+    feature_index, threshold = find_best_split(X, y)
 
-    gini_left = 1 - (left_labels.value_counts(normalize=True) ** 2).sum()
-    gini_right = 1 - (right_labels.value_counts(normalize=True) ** 2).sum()
+    if feature_index is None:
+        return {'value': majority_class}
 
-    gini_index = p_left * gini_left + p_right * gini_right
-    return gini_index
+    X_left, y_left, X_right, y_right = split_dataset(X, y, feature_index, threshold)
 
-def predict(X, tree):
-    if 'class' in tree:
-        return tree['class']
+    left_subtree = build_tree(X_left, y_left, depth - 1)
+    right_subtree = build_tree(X_right, y_right, depth - 1)
 
-    feature_index = tree['feature_index']
-    threshold = tree['threshold']
+    return {'feature_index': feature_index, 'threshold': threshold,
+            'left': left_subtree, 'right': right_subtree}
 
-    if X[feature_index] <= threshold:
-        return predict(X, tree['left'])
+def fit(X, y, max_depth=None):
+    return build_tree(X, y, max_depth)
+
+def predict_instance(node, x):
+    if 'value' in node:
+        return node['value']
+    if x[node['feature_index']] <= node['threshold']:
+        return predict_instance(node['left'], x)
     else:
-        return predict(X, tree['right'])
+        return predict_instance(node['right'], x)
 
+def predict(tree, X):
+    return [predict_instance(tree, x) for x in X]
 
-# Load data from CSV file using pandas
-def load_data(filename):
-    data = pd.read_csv(filename)
-    X = data.iloc[:, :-1]  # Features
-    y = data.iloc[:, -1]   # Labels
-    return X, y
+# Load data
+data_df = pd.read_csv('DataAnalyticsLab\DecisionTree\Tree.csv')
+print("Dataset:\n", data_df)
 
+X = data_df.iloc[:, :-1].values
+y = data_df.iloc[:, -1].values
 
-# Example usage
-if __name__ == "__main__":
-    # Replace 'your_dataset.csv' with the path to your CSV file
-    dataset_path = 'DataAnalyticsLab\DecisionTree\Tree.csv'
-    X_train, y_train = load_data(dataset_path)
+# Train the decision tree
+dt_tree = fit(X, y, max_depth=3)
 
-    # Create and train the decision tree
-    max_depth = 3
-    tree_model = fit(X_train, y_train, max_depth)
-
-    # Example prediction
-    example_instance = X_train.iloc[0]
-    prediction = predict(example_instance, tree_model)
-    print(f"Prediction for {example_instance}: {prediction}")
+# Make predictions
+predictions = predict(dt_tree, X)
+print("Predictions:", predictions)
